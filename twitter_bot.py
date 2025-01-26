@@ -8,7 +8,9 @@ import tweepy
 from PIL import Image, ImageDraw, ImageFont
 from time import sleep
 from datetime import datetime
-import openai
+from openai import OpenAI  # Updated OpenAI import
+import yfinance as yf  # For fetching stock/crypto data
+import pandas_ta as ta  # For technical analysis
 
 # Logging setup
 logging.basicConfig(level=logging.INFO)
@@ -41,6 +43,9 @@ if not all([API_KEY, API_SECRET_KEY, ACCESS_TOKEN, ACCESS_TOKEN_SECRET]):
 auth = tweepy.OAuthHandler(API_KEY, API_SECRET_KEY)
 auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 api = tweepy.API(auth)
+
+# Initialize OpenAI client
+openai_client = OpenAI(api_key=OPENAI_API_KEY)
 
 # Path to the images folder (uploaded to GitHub)
 IMAGES_FOLDER = "images"  # Ensure this folder exists and contains your images
@@ -125,13 +130,8 @@ def get_random_prompt():
 def fetch_deepseek_response(user_prompt):
     """Fetch reasoning content from DeepSeek."""
     try:
-        openai.api_key = DEEPSEEK_API_KEY
-        deepseek_client = openai.OpenAI(
-            api_key=os.environ["DEEPSEEK_API_KEY"],
-            base_url="https://api.deepseek.com/v1"
-        )
-
-        deepseek_response = deepseek_client.chat.completions.create(
+        openai_client.api_key = DEEPSEEK_API_KEY
+        deepseek_response = openai_client.chat.completions.create(
             model="deepseek-chat",
             messages=[{"role": "user", "content": user_prompt}]
         )
@@ -145,7 +145,6 @@ def fetch_deepseek_response(user_prompt):
 def fetch_openai_response(user_prompt, reasoning_content):
     """Use OpenAI GPT to refine the DeepSeek reasoning."""
     try:
-        openai.api_key = OPENAI_API_KEY
         system_prompt = f"""
         You are a helpful assistant. Below is the reasoning provided by DeepSeek:
         {reasoning_content}
@@ -153,7 +152,7 @@ def fetch_openai_response(user_prompt, reasoning_content):
         Now, answer the following question in a clear and concise way:
         {user_prompt}
         """
-        gpt_response = openai.ChatCompletion.create(
+        gpt_response = openai_client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -165,6 +164,44 @@ def fetch_openai_response(user_prompt, reasoning_content):
     except Exception as e:
         logger.error(f"Error fetching OpenAI response: {e}")
         return "OpenAI is currently unavailable. Stay tuned!"
+
+# Calculate RSI for a given symbol
+def calculate_rsi(symbol, period=14):
+    """
+    Calculate RSI for a given symbol.
+    """
+    try:
+        # Fetch historical data (example for stocks using yfinance)
+        data = yf.download(symbol, period="1mo", interval="1d")  # 1 month of daily data
+        if data.empty:
+            logger.error(f"No data found for symbol: {symbol}")
+            return None
+
+        # Calculate RSI using pandas_ta
+        data['RSI'] = ta.rsi(data['Close'], length=period)
+        latest_rsi = data['RSI'].iloc[-1]  # Get the latest RSI value
+        return latest_rsi
+    except Exception as e:
+        logger.error(f"Error calculating RSI: {e}")
+        return None
+
+# Generate a TA-based tweet
+def generate_ta_tweet(symbol):
+    """
+    Generate a tweet based on RSI and other TA indicators.
+    """
+    rsi = calculate_rsi(symbol)
+    if rsi is None:
+        return "Unable to fetch RSI data. Stay tuned for updates!"
+
+    if rsi < 30:
+        ta_analysis = f"🚨 {symbol} is OVERSOLD (RSI: {rsi:.2f}). Time to BUY? 🚨"
+    elif rsi > 70:
+        ta_analysis = f"🚨 {symbol} is OVERBOUGHT (RSI: {rsi:.2f}). Time to SELL? 🚨"
+    else:
+        ta_analysis = f"{symbol} is in a NEUTRAL zone (RSI: {rsi:.2f}). Hold tight! 💪"
+
+    return ta_analysis
 
 # Post a tweet
 def post_tweet(content, image_path=None):
@@ -200,8 +237,8 @@ def reply_to_mentions():
 # Main bot logic
 def run_bot():
     while True:
-        # Rotate between regular tweets, meme tweets, and interactions
-        action = random.choice(["regular_tweet", "meme_tweet", "interact"])
+        # Rotate between regular tweets, meme tweets, TA tweets, and interactions
+        action = random.choice(["regular_tweet", "meme_tweet", "ta_tweet", "interact"])
 
         if action == "regular_tweet":
             # Post a regular tweet
@@ -219,6 +256,12 @@ def run_bot():
             meme_path = create_meme(image_name, final_response)
             if meme_path:
                 post_tweet(final_response, meme_path)
+
+        elif action == "ta_tweet":
+            # Post a TA-based tweet
+            symbol = "BTC-USD"  # Example: Bitcoin
+            ta_tweet = generate_ta_tweet(symbol)
+            post_tweet(ta_tweet)
 
         elif action == "interact":
             # Reply to mentions
