@@ -1,28 +1,22 @@
 import os
-import random
 import logging
 import threading
 from flask import Flask
 import tweepy
-import nltk
-from nltk.chat.util import Chat, reflections
-from PIL import Image, ImageDraw, ImageFont
+import openai
 from datetime import datetime
 from time import sleep
 
-# Ensure NLTK resources are available
-nltk.download("punkt")
-
 # Logging setup
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("TwitterBot")
+logger = logging.getLogger("IntelligentTwitterBot")
 
 # Flask setup for Render port binding
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Twitter bot is running!"
+    return "Intelligent Twitter bot is running with DeepSeek and OpenAI integration!"
 
 def start_flask():
     # Use the PORT environment variable for Render
@@ -35,7 +29,11 @@ API_SECRET_KEY = os.getenv('TWITTER_API_SECRET_KEY')
 ACCESS_TOKEN = os.getenv('TWITTER_ACCESS_TOKEN')
 ACCESS_TOKEN_SECRET = os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
 
-# Validate that all credentials are set
+# Fetch API keys for DeepSeek and OpenAI
+DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+
+# Validate Twitter API credentials
 if not all([API_KEY, API_SECRET_KEY, ACCESS_TOKEN, ACCESS_TOKEN_SECRET]):
     raise ValueError("Twitter API credentials are not properly set as environment variables.")
 
@@ -44,44 +42,46 @@ auth = tweepy.OAuthHandler(API_KEY, API_SECRET_KEY)
 auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 api = tweepy.API(auth)
 
-# ELIZA chatbot setup
-pairs = [
-    [r"I want to invest in (.*)", ["Why do you want to invest in %1?", "Have you considered $FEDJA?"]],
-    [r"(.*)crypto(.*)", ["$FEDJA is the next big thing in crypto! 🐾💎", "Join the memecoin revolution with $FEDJA!"]],
-    [r"(.*)", ["Check out $FEDJA, the hottest memecoin on Solana! 🚀", "Invest smart, invest in $FEDJA."]],
-]
-chatbot = Chat(pairs, reflections)
-
-# Path to the images folder
-images_folder = "images"  # Assumes the folder is in the project root
-
-# Meme creation setup
-def create_meme(image_path, caption):
-    """Overlay text on an image to create a meme."""
+# Fetch reasoning from DeepSeek and OpenAI
+def get_intelligent_response(user_prompt):
+    """Generate a response using DeepSeek and OpenAI."""
     try:
-        with Image.open(image_path) as img:
-            draw = ImageDraw.Draw(img)
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
+        # Set up DeepSeek client
+        openai.api_key = DEEPSEEK_API_KEY
+        deepseek_client = openai.OpenAI(
+            api_key=os.environ["DEEPSEEK_API_KEY"],
+            base_url="https://api.deepseek.com/v1"
+        )
 
-            # Calculate text size using textbbox
-            text_bbox = draw.textbbox((0, 0), caption, font=font)
-            text_width = text_bbox[2] - text_bbox[0]
-            text_height = text_bbox[3] - text_bbox[1]
+        # Get reasoning from DeepSeek
+        deepseek_response = deepseek_client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": user_prompt}]
+        )
+        reasoning_content = deepseek_response.choices[0].message.content
+        logger.info("DeepSeek Reasoning Content: %s", reasoning_content)
 
-            # Determine text position
-            width, height = img.size
-            x = (width - text_width) // 2
-            y = height - text_height - 20
-
-            # Draw the text
-            draw.text((x, y), caption, font=font, fill="white")
-
-            # Save the image with the meme
-            output_path = "meme_output.jpg"
-            img.save(output_path)
-            return output_path
+        # Get final response from OpenAI
+        openai.api_key = OPENAI_API_KEY
+        system_prompt = f"""
+        You are a helpful assistant. Below is the reasoning provided by DeepSeek:
+        {reasoning_content}
+        
+        Now, answer the following question in a clear and concise way:
+        {user_prompt}
+        """
+        gpt4_response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+        )
+        final_response = gpt4_response.choices[0].message.content
+        logger.info("GPT-4 Final Response: %s", final_response)
+        return final_response
     except Exception as e:
-        logger.error(f"Error creating meme: {e}")
+        logger.error(f"Error in DeepSeek/OpenAI integration: {e}")
         return None
 
 # Post a tweet
@@ -92,47 +92,17 @@ def post_tweet(content):
     except Exception as e:
         logger.error(f"Error posting tweet: {e}")
 
-# Post a meme
-def post_meme():
-    try:
-        if not os.path.exists(images_folder):
-            logger.error(f"Images folder '{images_folder}' does not exist.")
-            return
-
-        images = os.listdir(images_folder)
-        if not images:
-            logger.warning("No images found in the images folder.")
-            return
-
-        image_path = os.path.join(images_folder, random.choice(images))
-        captions = [
-            "When $FEDJA takes off 🚀😸",
-            "HODLing $FEDJA like a boss 🐾💰",
-            "$FEDJA is the cat's meow in crypto!",
-        ]
-        caption = random.choice(captions)
-        meme_path = create_meme(image_path, caption)
-        if meme_path:
-            api.update_with_media(meme_path, caption)
-            logger.info("Meme posted successfully.")
-    except Exception as e:
-        logger.error(f"Error posting meme: {e}")
-
 # Main bot logic
 def run_bot():
     while True:
-        now = datetime.now()
-        if now.hour % 4 == 0:  # Post every 4 hours
-            if random.random() < 0.7:
-                # 70% chance to post an ELIZA response
-                message = chatbot.respond("What is $FEDJA?")
-                post_tweet(message)
-            else:
-                # 30% chance to post a meme
-                post_meme()
+        # Query DeepSeek and OpenAI for a response
+        user_prompt = "Explain why $FEDJA is a great investment for crypto enthusiasts."
+        final_response = get_intelligent_response(user_prompt)
+        if final_response:
+            post_tweet(final_response)
 
-        logger.info("Sleeping for an hour...")
-        sleep(3600)  # Sleep for an hour
+        logger.info("Sleeping for 15 minutes...")
+        sleep(900)  # Sleep for 15 minutes (900 seconds)
 
 if __name__ == "__main__":
     # Start Flask server in a separate thread for Render port binding
