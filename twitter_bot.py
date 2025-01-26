@@ -3,25 +3,24 @@ import random
 import json
 import logging
 import threading
+import requests
 from flask import Flask
 import tweepy
 from PIL import Image, ImageDraw, ImageFont
 from time import sleep
 from datetime import datetime
-from openai import OpenAI  # Updated OpenAI import
-import yfinance as yf  # For fetching stock/crypto data
-import pandas_ta as ta  # For technical analysis
+from openai import OpenAI
 
 # Logging setup
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("TwitterBot")
+logger = logging.getLogger("CryptoSocialBot")
 
 # Flask setup for Render port binding
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Crypto, AI, and Memecoin Bot with DeepSeek and OpenAI is running!"
+    return "Crypto, Memes, AI, DeFi, and DeFiAI Social Bot is running!"
 
 def start_flask():
     port = int(os.environ.get("PORT", 10000))  # Default to 10000 if PORT is not set
@@ -34,18 +33,20 @@ ACCESS_TOKEN = os.getenv('TWITTER_ACCESS_TOKEN')
 ACCESS_TOKEN_SECRET = os.getenv('TWITTER_ACCESS_TOKEN_SECRET')
 DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+CRYPTOPANIC_API_KEY = os.getenv('CRYPTOPANIC_API_KEY')
 
-# Validate Twitter API credentials
-if not all([API_KEY, API_SECRET_KEY, ACCESS_TOKEN, ACCESS_TOKEN_SECRET]):
-    raise ValueError("Twitter API credentials are not properly set as environment variables.")
+# Validate API credentials
+if not all([API_KEY, API_SECRET_KEY, ACCESS_TOKEN, ACCESS_TOKEN_SECRET, DEEPSEEK_API_KEY, OPENAI_API_KEY, CRYPTOPANIC_API_KEY]):
+    raise ValueError("API credentials are not properly set as environment variables.")
 
 # Authenticate with Twitter
 auth = tweepy.OAuthHandler(API_KEY, API_SECRET_KEY)
 auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
 api = tweepy.API(auth)
 
-# Initialize OpenAI client
+# Initialize OpenAI and DeepSeek clients
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
+deepseek_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com/v1")
 
 # Path to the images folder (uploaded to GitHub)
 IMAGES_FOLDER = "images"  # Ensure this folder exists and contains your images
@@ -60,6 +61,26 @@ if not os.path.exists(IMAGES_FOLDER):
 if not os.path.exists(MEMORY_FILE):
     with open(MEMORY_FILE, "w") as f:
         json.dump({"prompts": [], "responses": []}, f)
+
+# Fetch trending crypto topics from CryptoPanic
+def fetch_trending_topics():
+    """Fetch trending crypto topics from CryptoPanic."""
+    try:
+        url = f"https://cryptopanic.com/api/v1/posts/?auth_token={CRYPTOPANIC_API_KEY}"
+        response = requests.get(url)
+        if response.status_code == 200:
+            news_items = response.json()["results"]
+            trending_topics = []
+            for item in news_items:
+                if "title" in item:
+                    trending_topics.append(item["title"])
+            return trending_topics[:5]  # Return top 5 trending topics
+        else:
+            logger.error(f"Failed to fetch trending topics: {response.status_code}")
+            return []
+    except Exception as e:
+        logger.error(f"Error fetching trending topics: {e}")
+        return []
 
 # Meme generation function
 def create_meme(image_name, caption):
@@ -115,41 +136,59 @@ def update_memory(prompt, response):
     memory["responses"].append(response)
     save_memory(memory)
 
-# Dynamic prompts
-def get_random_prompt():
-    """Get a random prompt from a predefined list."""
-    prompts = [
-        "Why is $FEDJA the best memecoin on Solana?",
-        "What are the latest advancements in DeFi?",
-        "How does AI impact the future of blockchain?",
-        "What are the risks and rewards of investing in memecoins?"
-    ]
-    return random.choice(prompts)
+# Generate a unique prompt dynamically with trending crypto topics
+def generate_unique_prompt():
+    """Use OpenAI to generate a unique and engaging prompt with trending crypto topics."""
+    try:
+        trending_topics = fetch_trending_topics()
+        if trending_topics:
+            trending_text = ", ".join(trending_topics)
+            prompt_request = f"""
+            Come up with a unique and engaging question or statement about crypto, memes, AI, DeFi, or DeFiAI.
+            Use a witty and mildly sarcastic tone. Avoid outright jokes.
+            Incorporate these trending crypto topics: {trending_text}.
+            """
+        else:
+            prompt_request = """
+            Come up with a unique and engaging question or statement about crypto, memes, AI, DeFi, or DeFiAI.
+            Use a witty and mildly sarcastic tone. Avoid outright jokes.
+            """
+        response = openai_client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a witty and mildly sarcastic assistant focused on crypto, memes, AI, DeFi, and DeFiAI."},
+                {"role": "user", "content": prompt_request}
+            ]
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        logger.error(f"Error generating unique prompt: {e}")
+        return "What's the future of crypto? Probably more volatility and memes. 🚀 #Crypto"
 
-# Fetch reasoning from DeepSeek
+# Fetch reasoning content from DeepSeek
 def fetch_deepseek_response(user_prompt):
     """Fetch reasoning content from DeepSeek."""
     try:
-        openai_client.api_key = DEEPSEEK_API_KEY
-        deepseek_response = openai_client.chat.completions.create(
-            model="deepseek-chat",
+        deepseek_response = deepseek_client.chat.completions.create(
+            model='deepseek-chat',
             messages=[{"role": "user", "content": user_prompt}]
         )
-        reasoning_content = deepseek_response.choices[0].message.content.strip()
+        reasoning_content = deepseek_response.choices[0].message.content
         return reasoning_content
     except Exception as e:
         logger.error(f"Error fetching DeepSeek response: {e}")
-        return "DeepSeek is currently unavailable. Stay tuned!"
+        return "DeepSeek is currently unavailable. But hey, I'm still here. 😅 #Crypto #AI #DeFi"
 
-# Fetch final response from OpenAI
+# Generate a witty and mildly sarcastic response using OpenAI
 def fetch_openai_response(user_prompt, reasoning_content):
-    """Use OpenAI GPT to refine the DeepSeek reasoning."""
+    """Use OpenAI GPT to refine the DeepSeek reasoning with a witty/sarcastic tone."""
     try:
         system_prompt = f"""
-        You are a helpful assistant. Below is the reasoning provided by DeepSeek:
+        You are a witty and mildly sarcastic assistant focused on crypto, memes, AI, DeFi, and DeFiAI.
+        Below is the reasoning provided by DeepSeek:
         {reasoning_content}
-        
-        Now, answer the following question in a clear and concise way:
+
+        Now, answer the following question in a clear, concise, and mildly sarcastic way:
         {user_prompt}
         """
         gpt_response = openai_client.chat.completions.create(
@@ -159,49 +198,42 @@ def fetch_openai_response(user_prompt, reasoning_content):
                 {"role": "user", "content": user_prompt},
             ]
         )
-        final_response = gpt_response.choices[0].message.content.strip()
+        final_response = gpt_response.choices[0].message.content
         return final_response
     except Exception as e:
         logger.error(f"Error fetching OpenAI response: {e}")
-        return "OpenAI is currently unavailable. Stay tuned!"
+        return "OpenAI is currently unavailable. But hey, at least I'm still here. 😅 #Crypto #AI #DeFi"
 
-# Calculate RSI for a given symbol
-def calculate_rsi(symbol, period=14):
-    """
-    Calculate RSI for a given symbol.
-    """
+# Generate a witty and mildly sarcastic meme caption dynamically
+def generate_meme_caption():
+    """Use OpenAI to generate a witty and mildly sarcastic caption for a meme."""
     try:
-        # Fetch historical data (example for stocks using yfinance)
-        data = yf.download(symbol, period="1mo", interval="1d")  # 1 month of daily data
-        if data.empty:
-            logger.error(f"No data found for symbol: {symbol}")
-            return None
-
-        # Calculate RSI using pandas_ta
-        data['RSI'] = ta.rsi(data['Close'], length=period)
-        latest_rsi = data['RSI'].iloc[-1]  # Get the latest RSI value
-        return latest_rsi
+        trending_topics = fetch_trending_topics()
+        if trending_topics:
+            trending_text = ", ".join(trending_topics)
+            caption_request = f"""
+            Come up with a witty and mildly sarcastic caption for a crypto meme.
+            Make it relatable to the crypto community and include emojis if possible.
+            Avoid outright jokes.
+            Incorporate these trending crypto topics: {trending_text}.
+            """
+        else:
+            caption_request = """
+            Come up with a witty and mildly sarcastic caption for a crypto meme.
+            Make it relatable to the crypto community and include emojis if possible.
+            Avoid outright jokes.
+            """
+        response = openai_client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are a witty and mildly sarcastic assistant focused on crypto memes."},
+                {"role": "user", "content": caption_request}
+            ]
+        )
+        return response.choices[0].message.content.strip()
     except Exception as e:
-        logger.error(f"Error calculating RSI: {e}")
-        return None
-
-# Generate a TA-based tweet
-def generate_ta_tweet(symbol):
-    """
-    Generate a tweet based on RSI and other TA indicators.
-    """
-    rsi = calculate_rsi(symbol)
-    if rsi is None:
-        return "Unable to fetch RSI data. Stay tuned for updates!"
-
-    if rsi < 30:
-        ta_analysis = f"🚨 {symbol} is OVERSOLD (RSI: {rsi:.2f}). Time to BUY? 🚨"
-    elif rsi > 70:
-        ta_analysis = f"🚨 {symbol} is OVERBOUGHT (RSI: {rsi:.2f}). Time to SELL? 🚨"
-    else:
-        ta_analysis = f"{symbol} is in a NEUTRAL zone (RSI: {rsi:.2f}). Hold tight! 💪"
-
-    return ta_analysis
+        logger.error(f"Error generating meme caption: {e}")
+        return "When you buy the dip, but it keeps dipping... because of course it does. 😅 #CryptoMemes"
 
 # Post a tweet
 def post_tweet(content, image_path=None):
@@ -237,31 +269,23 @@ def reply_to_mentions():
 # Main bot logic
 def run_bot():
     while True:
-        # Rotate between regular tweets, meme tweets, TA tweets, and interactions
-        action = random.choice(["regular_tweet", "meme_tweet", "ta_tweet", "interact"])
+        # Rotate between regular tweets, meme tweets, and interactions
+        action = random.choice(["regular_tweet", "meme_tweet", "interact"])
 
         if action == "regular_tweet":
-            # Post a regular tweet
-            user_prompt = get_random_prompt()
+            # Generate a unique prompt and post a regular tweet
+            user_prompt = generate_unique_prompt()
             reasoning_content = fetch_deepseek_response(user_prompt)
             final_response = fetch_openai_response(user_prompt, reasoning_content)
             post_tweet(final_response)
 
         elif action == "meme_tweet":
-            # Post a meme tweet
-            user_prompt = get_random_prompt()
-            reasoning_content = fetch_deepseek_response(user_prompt)
-            final_response = fetch_openai_response(user_prompt, reasoning_content)
+            # Generate a meme caption and post a meme tweet
+            caption = generate_meme_caption()
             image_name = random.choice(os.listdir(IMAGES_FOLDER))  # Pick a random image
-            meme_path = create_meme(image_name, final_response)
+            meme_path = create_meme(image_name, caption)
             if meme_path:
-                post_tweet(final_response, meme_path)
-
-        elif action == "ta_tweet":
-            # Post a TA-based tweet
-            symbol = "BTC-USD"  # Example: Bitcoin
-            ta_tweet = generate_ta_tweet(symbol)
-            post_tweet(ta_tweet)
+                post_tweet(caption, meme_path)
 
         elif action == "interact":
             # Reply to mentions
