@@ -154,7 +154,7 @@ def generate_unique_prompt():
             Use a witty and mildly sarcastic tone. Avoid outright jokes.
             """
         response = openai_client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a witty and mildly sarcastic assistant focused on crypto, memes, AI, DeFi, and DeFiAI."},
                 {"role": "user", "content": prompt_request}
@@ -192,7 +192,7 @@ def fetch_openai_response(user_prompt, reasoning_content):
         {user_prompt}
         """
         gpt_response = openai_client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -224,7 +224,7 @@ def generate_meme_caption():
             Avoid outright jokes.
             """
         response = openai_client.chat.completions.create(
-            model="gpt-4",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a witty and mildly sarcastic assistant focused on crypto memes."},
                 {"role": "user", "content": caption_request}
