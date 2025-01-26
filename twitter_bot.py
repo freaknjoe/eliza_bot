@@ -2,13 +2,12 @@ import os
 import random
 import json
 import logging
-import time 
+import time
 import threading
 import requests
 from flask import Flask
 import tweepy
 from PIL import Image, ImageDraw, ImageFont
-from time import sleep
 from datetime import datetime
 from openai import OpenAI
 
@@ -52,7 +51,7 @@ client = tweepy.Client(
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
 deepseek_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com/v1")
 
-# Path to the images folder (uploaded to GitHub)
+# Path to the images folder
 IMAGES_FOLDER = "images"  # Ensure this folder exists and contains your images
 MEMORY_FILE = "bot_memory.json"  # File to store prompts and responses
 
@@ -68,20 +67,16 @@ if not os.path.exists(MEMORY_FILE):
 
 # Rate limit tracking
 RATE_LIMIT_WINDOW = 900  # 15 minutes in seconds
-MAX_TWEETS_PER_WINDOW = 900  # Twitter's limit for tweets
+MAX_TWEETS_PER_WINDOW = 900
 tweet_count = 0
 last_reset_time = time.time()
 
 def check_rate_limit():
     global tweet_count, last_reset_time
     current_time = time.time()
-    
-    # Reset the count if the window has passed
     if current_time - last_reset_time >= RATE_LIMIT_WINDOW:
         tweet_count = 0
         last_reset_time = current_time
-    
-    # Check if the limit is reached
     if tweet_count >= MAX_TWEETS_PER_WINDOW:
         sleep_time = RATE_LIMIT_WINDOW - (current_time - last_reset_time)
         logger.warning(f"Rate limit reached. Sleeping for {sleep_time} seconds.")
@@ -91,256 +86,118 @@ def check_rate_limit():
 
 # Fetch trending crypto topics from CryptoPanic
 def fetch_trending_topics():
-    """Fetch trending crypto topics from CryptoPanic."""
     try:
         url = f"https://cryptopanic.com/api/v1/posts/?auth_token={CRYPTOPANIC_API_KEY}"
         response = requests.get(url)
-        if response.status_code == 200:
+        if response.status_code == 200 and "results" in response.json():
             news_items = response.json()["results"]
-            trending_topics = []
-            for item in news_items:
-                if "title" in item:
-                    trending_topics.append(item["title"])
-            return trending_topics[:5]  # Return top 5 trending topics
+            return [item["title"] for item in news_items if "title" in item][:5]
         else:
-            logger.error(f"Failed to fetch trending topics: {response.status_code}")
+            logger.warning(f"Failed to fetch trending topics: {response.status_code}")
             return []
     except Exception as e:
         logger.error(f"Error fetching trending topics: {e}")
         return []
 
-# Meme generation function with dynamic font scaling
-def create_meme(image_name, caption):
-    """Overlay text on an image to create a meme with dynamic font scaling."""
-    try:
-        image_path = os.path.join(IMAGES_FOLDER, image_name)
-        if not os.path.exists(image_path):
-            logger.error(f"Image {image_name} not found in {IMAGES_FOLDER}.")
-            return None
-
-        with Image.open(image_path) as img:
-            draw = ImageDraw.Draw(img)
-            width, height = img.size
-
-            # Start with a base font size
-            font_size = 36
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
-
-            # Calculate text size and adjust font size if necessary
-            text_bbox = draw.textbbox((0, 0), caption, font=font)
-            text_width = text_bbox[2] - text_bbox[0]
-            text_height = text_bbox[3] - text_bbox[1]
-
-            # Reduce font size until the text fits within the image width
-            while text_width > width - 40 or text_height > height - 40:  # Leave 20px margin on each side
-                font_size -= 2
-                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
-                text_bbox = draw.textbbox((0, 0), caption, font=font)
-                text_width = text_bbox[2] - text_bbox[0]
-                text_height = text_bbox[3] - text_bbox[1]
-
-            # Determine text position
-            x = (width - text_width) // 2
-            y = height - text_height - 20
-
-            # Draw the text
-            draw.text((x, y), caption, font=font, fill="white")
-
-            # Save the image with the meme
-            output_path = "meme_output.jpg"
-            img.save(output_path)
-            return output_path
-    except Exception as e:
-        logger.error(f"Error creating meme: {e}")
-        return None
-
 # Memory system
 def load_memory():
-    """Load past interactions from a file."""
-    if os.path.exists(MEMORY_FILE):
-        with open(MEMORY_FILE, "r") as f:
-            return json.load(f)
-    return {"prompts": [], "responses": []}
+    with open(MEMORY_FILE, "r") as f:
+        return json.load(f)
 
 def save_memory(memory):
-    """Save interactions to a file."""
     with open(MEMORY_FILE, "w") as f:
         json.dump(memory, f)
 
 def update_memory(prompt, response):
-    """Update the bot's memory with a new interaction."""
     memory = load_memory()
     memory["prompts"].append(prompt)
     memory["responses"].append(response)
     save_memory(memory)
 
-# Generate a unique prompt dynamically with trending crypto topics
-def generate_unique_prompt():
-    """Use OpenAI to generate a unique and engaging prompt with trending crypto topics."""
-    try:
-        trending_topics = fetch_trending_topics()
-        if trending_topics:
-            trending_text = ", ".join(trending_topics)
-            prompt_request = f"""
-            Come up with a unique and engaging question or statement about crypto, memes, AI, DeFi, or DeFiAI.
-            Use a witty and mildly sarcastic tone. Avoid outright jokes.
-            Incorporate these trending crypto topics: {trending_text}.
-            """
-        else:
-            prompt_request = """
-            Come up with a unique and engaging question or statement about crypto, memes, AI, DeFi, or DeFiAI.
-            Use a witty and mildly sarcastic tone. Avoid outright jokes.
-            """
-        response = openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",  # Use GPT-3.5
-            messages=[
-                {"role": "system", "content": "You are a witty and mildly sarcastic assistant focused on crypto, memes, AI, DeFi, and DeFiAI."},
-                {"role": "user", "content": prompt_request}
-            ]
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        logger.error(f"Error generating unique prompt: {e}")
-        return "What's the future of crypto? Probably more volatility and memes. 🚀 #Crypto"
+# Exponential backoff for OpenAI requests
+def call_openai_with_backoff(prompt):
+    retries = 0
+    while retries < 5:
+        try:
+            response = openai_client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "system", "content": "You are a witty assistant."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            return response.choices[0].message.content.strip()
+        except openai.error.RateLimitError:
+            retries += 1
+            time.sleep(min(2 ** retries, 60))
+        except Exception as e:
+            logger.error(f"Error calling OpenAI: {e}")
+            return None
 
 # Fetch reasoning content from DeepSeek
 def fetch_deepseek_response(user_prompt):
-    """Fetch reasoning content from DeepSeek."""
     try:
         deepseek_response = deepseek_client.chat.completions.create(
             model='deepseek-chat',
             messages=[{"role": "user", "content": user_prompt}]
         )
-        reasoning_content = deepseek_response.choices[0].message.content
-        return reasoning_content
+        return deepseek_response.choices[0].message.content.strip()
     except Exception as e:
         logger.error(f"Error fetching DeepSeek response: {e}")
-        return "DeepSeek is currently unavailable. But hey, I'm still here. 😅 #Crypto #AI #DeFi"
-
-# Generate a witty and mildly sarcastic response using OpenAI
-def fetch_openai_response(user_prompt, reasoning_content):
-    """Use OpenAI GPT to refine the DeepSeek reasoning with a witty/sarcastic tone."""
-    try:
-        system_prompt = f"""
-        You are a witty and mildly sarcastic assistant focused on crypto, memes, AI, DeFi, and DeFiAI.
-        Below is the reasoning provided by DeepSeek:
-        {reasoning_content}
-
-        Now, answer the following question in a clear, concise, and mildly sarcastic way:
-        {user_prompt}
-        """
-        gpt_response = openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",  # Use GPT-3.5
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ]
-        )
-        final_response = gpt_response.choices[0].message.content
-        return final_response
-    except Exception as e:
-        logger.error(f"Error fetching OpenAI response: {e}")
-        return "OpenAI is currently unavailable. But hey, at least I'm still here. 😅 #Crypto #AI #DeFi"
-
-# Generate a witty and mildly sarcastic meme caption dynamically
-def generate_meme_caption():
-    """Use OpenAI to generate a witty and mildly sarcastic caption for a meme."""
-    try:
-        trending_topics = fetch_trending_topics()
-        if trending_topics:
-            trending_text = ", ".join(trending_topics)
-            caption_request = f"""
-            Come up with a witty and mildly sarcastic caption for a crypto meme.
-            Make it relatable to the crypto community and include emojis if possible.
-            Avoid outright jokes.
-            Incorporate these trending crypto topics: {trending_text}.
-            """
-        else:
-            caption_request = """
-            Come up with a witty and mildly sarcastic caption for a crypto meme.
-            Make it relatable to the crypto community and include emojis if possible.
-            Avoid outright jokes.
-            """
-        response = openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",  # Use GPT-3.5
-            messages=[
-                {"role": "system", "content": "You are a witty and mildly sarcastic assistant focused on crypto memes."},
-                {"role": "user", "content": caption_request}
-            ]
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        logger.error(f"Error generating meme caption: {e}")
-        return "When you buy the dip, but it keeps dipping... because of course it does. 😅 #CryptoMemes"
-
-# Post a tweet using Twitter API v2 with rate limiting
-def post_tweet(content, image_path=None):
-    global tweet_count
-    check_rate_limit()  # Ensure we're within rate limits
-    
-    try:
-        if image_path:
-            media = client.media_upload(filename=image_path)
-            response = client.create_tweet(text=content, media_ids=[media.media_id])
-        else:
-            response = client.create_tweet(text=content)
-        
-        if response.data:
-            tweet_count += 1
-            logger.info("Tweet posted successfully.")
-        else:
-            logger.error("Failed to post tweet.")
-    except Exception as e:
-        logger.error(f"Error posting tweet: {e}")
+        return None
 
 # Reply to mentions
 def reply_to_mentions():
-    """Reply to tweets that mention the bot."""
     try:
-        mentions = client.get_mentions(count=5)  # Fetch the latest 5 mentions
-        for mention in mentions.data:
-            if not mention.favorited:  # Avoid replying to the same mention twice
-                user_prompt = mention.text.replace("@YourBotName", "").strip()
-                reasoning_content = fetch_deepseek_response(user_prompt)
-                final_response = fetch_openai_response(user_prompt, reasoning_content)
-                client.create_tweet(
-                    text=f"@{mention.user.screen_name} {final_response}",
-                    in_reply_to_tweet_id=mention.id
-                )
-                logger.info(f"Replied to mention from @{mention.user.screen_name}")
-                client.like(mention.id)  # Mark the mention as favorited to avoid duplicate replies
+        mentions = client.get_users_mentions(user_id="1878624202229493760", max_results=5)
+        if mentions.data:
+            for mention in mentions.data:
+                if not mention.favorited:
+                    user_prompt = mention.text.replace("@3DPUNKBOT", "").strip()
+                    reasoning_content = fetch_deepseek_response(user_prompt)
+                    
+                    if reasoning_content is None:
+                        logger.info(f"Skipping reply to @{mention.author.username} due to DeepSeek failure.")
+                        continue
+                    
+                    final_response = call_openai_with_backoff(f"Based on this reasoning: {reasoning_content}, respond to this: {user_prompt}")
+                    if final_response:
+                        client.create_tweet(
+                            text=f"@{mention.author.username} {final_response}",
+                            in_reply_to_tweet_id=mention.id
+                        )
+                        client.like(mention.id)
+                        logger.info(f"Replied to @{mention.author.username}.")
     except Exception as e:
         logger.error(f"Error replying to mentions: {e}")
 
 # Main bot logic
 def run_bot():
     while True:
-        # Rotate between regular tweets, meme tweets, and interactions
         action = random.choice(["regular_tweet", "meme_tweet", "interact"])
-
+        
         if action == "regular_tweet":
-            user_prompt = generate_unique_prompt()
-            reasoning_content = fetch_deepseek_response(user_prompt)
-            final_response = fetch_openai_response(user_prompt, reasoning_content)
-            post_tweet(final_response)
-            update_memory(user_prompt, final_response)
+            prompt = "Create a witty tweet about crypto, AI, or DeFi."
+            tweet = call_openai_with_backoff(prompt)
+            if tweet:
+                check_rate_limit()
+                client.create_tweet(text=tweet)
+                logger.info(f"Posted tweet: {tweet}")
 
         elif action == "meme_tweet":
-            caption = generate_meme_caption()
-            image_name = random.choice(os.listdir(IMAGES_FOLDER))
-            meme_path = create_meme(image_name, caption)
-            if meme_path:
-                post_tweet(caption, meme_path)
+            trending_topics = fetch_trending_topics()
+            if trending_topics:
+                meme_caption = call_openai_with_backoff(f"Create a witty crypto meme caption about: {', '.join(trending_topics)}")
+                if meme_caption:
+                    # Add meme generation logic here if needed
+                    logger.info(f"Generated meme caption: {meme_caption}")
 
         elif action == "interact":
             reply_to_mentions()
 
-        # Sleep for 15 minutes before the next action
         logger.info("Sleeping for 15 minutes...")
-        sleep(900)
+        time.sleep(900)
 
 if __name__ == "__main__":
-    # Start Flask server in a separate thread for Render port binding
     threading.Thread(target=start_flask, daemon=True).start()
-    # Start the bot
     run_bot()
