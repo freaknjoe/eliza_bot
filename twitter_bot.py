@@ -25,7 +25,8 @@ def home():
     return "Twitter bot is running!"
 
 def start_flask():
-    app.run(host='0.0.0.0', port=10000)
+    port = int(os.getenv('PORT', '10000'))
+    app.run(host='0.0.0.0', port=port)
 
 # Fetch credentials from environment variables
 API_KEY = os.getenv('TWITTER_API_KEY')
@@ -59,7 +60,10 @@ def create_meme(image_path, caption):
     try:
         with Image.open(image_path) as img:
             draw = ImageDraw.Draw(img)
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
+            try:
+                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
+            except IOError:
+                font = ImageFont.load_default()
             width, height = img.size
             text_width, text_height = draw.textsize(caption, font=font)
             x = (width - text_width) // 2
@@ -77,7 +81,7 @@ def post_tweet(content):
     try:
         api.update_status(content)
         logger.info("Tweet posted successfully.")
-    except Exception as e:
+    except tweepy.TweepError as e:
         logger.error(f"Error posting tweet: {e}")
 
 # Post a meme
@@ -108,19 +112,22 @@ def post_meme():
 
 # Main bot logic
 def run_bot():
-    while True:
-        now = datetime.now()
-        if now.hour % 4 == 0:  # Post every 4 hours
-            if random.random() < 0.7:
-                # 70% chance to post an ELIZA response
-                message = chatbot.respond("What is $FEDJA?")
-                post_tweet(message)
-            else:
-                # 30% chance to post a meme
-                post_meme()
+    try:
+        while True:
+            now = datetime.now()
+            if now.hour % 4 == 0:  # Post every 4 hours
+                if random.random() < 0.7:
+                    # 70% chance to post an ELIZA response
+                    message = chatbot.respond("What is $FEDJA?")
+                    post_tweet(message)
+                else:
+                    # 30% chance to post a meme
+                    post_meme()
 
-        logger.info("Sleeping for an hour...")
-        sleep(3600)  # Sleep for an hour
+            logger.info("Sleeping for an hour...")
+            sleep(3600)  # Sleep for an hour
+    except Exception as e:
+        logger.error(f"Unexpected error in bot thread: {e}")
 
 if __name__ == "__main__":
     # Start Flask server in a separate thread for Render port binding
