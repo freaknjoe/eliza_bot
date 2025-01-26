@@ -1,0 +1,12 @@
+# Ignore environment variables
+.env
+
+# Ignore logs
+*.log
+*.json
+
+# Ignore cache and system files
+__pycache__/
+*.py[cod]
+.DS_Store
+
