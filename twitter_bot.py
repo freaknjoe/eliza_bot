@@ -62,11 +62,21 @@ def create_meme(image_path, caption):
         with Image.open(image_path) as img:
             draw = ImageDraw.Draw(img)
             font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
+
+            # Calculate text size using textbbox
+            text_bbox = draw.textbbox((0, 0), caption, font=font)
+            text_width = text_bbox[2] - text_bbox[0]
+            text_height = text_bbox[3] - text_bbox[1]
+
+            # Determine text position
             width, height = img.size
-            text_width, text_height = draw.textsize(caption, font=font)
             x = (width - text_width) // 2
             y = height - text_height - 20
+
+            # Draw the text
             draw.text((x, y), caption, font=font, fill="white")
+
+            # Save the image with the meme
             output_path = "meme_output.jpg"
             img.save(output_path)
             return output_path
