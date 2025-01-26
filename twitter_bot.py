@@ -154,7 +154,7 @@ def generate_unique_prompt():
             Use a witty and mildly sarcastic tone. Avoid outright jokes.
             """
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-3.5-turbo",  # Use GPT-3.5
             messages=[
                 {"role": "system", "content": "You are a witty and mildly sarcastic assistant focused on crypto, memes, AI, DeFi, and DeFiAI."},
                 {"role": "user", "content": prompt_request}
@@ -192,7 +192,7 @@ def fetch_openai_response(user_prompt, reasoning_content):
         {user_prompt}
         """
         gpt_response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-3.5-turbo",  # Use GPT-3.5
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -224,7 +224,7 @@ def generate_meme_caption():
             Avoid outright jokes.
             """
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-3.5-turbo",  # Use GPT-3.5
             messages=[
                 {"role": "system", "content": "You are a witty and mildly sarcastic assistant focused on crypto memes."},
                 {"role": "user", "content": caption_request}
@@ -278,6 +278,8 @@ def run_bot():
             reasoning_content = fetch_deepseek_response(user_prompt)
             final_response = fetch_openai_response(user_prompt, reasoning_content)
             post_tweet(final_response)
+            # Update memory only for regular tweets
+            update_memory(user_prompt, final_response)
 
         elif action == "meme_tweet":
             # Generate a meme caption and post a meme tweet
@@ -290,9 +292,6 @@ def run_bot():
         elif action == "interact":
             # Reply to mentions
             reply_to_mentions()
-
-        # Update memory
-        update_memory(user_prompt, final_response)
 
         # Sleep for 15 minutes before the next action
         logger.info("Sleeping for 15 minutes...")
