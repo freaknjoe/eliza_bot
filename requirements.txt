@@ -33,4 +33,5 @@ urllib3==2.3.0
 nltk
 flask
 openai
-
+yfinance
+pandas_ta
