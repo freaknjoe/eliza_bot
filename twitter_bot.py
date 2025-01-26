@@ -39,10 +39,13 @@ CRYPTOPANIC_API_KEY = os.getenv('CRYPTOPANIC_API_KEY')
 if not all([API_KEY, API_SECRET_KEY, ACCESS_TOKEN, ACCESS_TOKEN_SECRET, DEEPSEEK_API_KEY, OPENAI_API_KEY, CRYPTOPANIC_API_KEY]):
     raise ValueError("API credentials are not properly set as environment variables.")
 
-# Authenticate with Twitter
-auth = tweepy.OAuthHandler(API_KEY, API_SECRET_KEY)
-auth.set_access_token(ACCESS_TOKEN, ACCESS_TOKEN_SECRET)
-api = tweepy.API(auth)
+# Authenticate with Twitter API v2
+client = tweepy.Client(
+    consumer_key=API_KEY,
+    consumer_secret=API_SECRET_KEY,
+    access_token=ACCESS_TOKEN,
+    access_token_secret=ACCESS_TOKEN_SECRET
+)
 
 # Initialize OpenAI and DeepSeek clients
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
@@ -61,6 +64,29 @@ if not os.path.exists(IMAGES_FOLDER):
 if not os.path.exists(MEMORY_FILE):
     with open(MEMORY_FILE, "w") as f:
         json.dump({"prompts": [], "responses": []}, f)
+
+# Rate limit tracking
+RATE_LIMIT_WINDOW = 900  # 15 minutes in seconds
+MAX_TWEETS_PER_WINDOW = 900  # Twitter's limit for tweets
+tweet_count = 0
+last_reset_time = time.time()
+
+def check_rate_limit():
+    global tweet_count, last_reset_time
+    current_time = time.time()
+    
+    # Reset the count if the window has passed
+    if current_time - last_reset_time >= RATE_LIMIT_WINDOW:
+        tweet_count = 0
+        last_reset_time = current_time
+    
+    # Check if the limit is reached
+    if tweet_count >= MAX_TWEETS_PER_WINDOW:
+        sleep_time = RATE_LIMIT_WINDOW - (current_time - last_reset_time)
+        logger.warning(f"Rate limit reached. Sleeping for {sleep_time} seconds.")
+        time.sleep(sleep_time)
+        tweet_count = 0
+        last_reset_time = time.time()
 
 # Fetch trending crypto topics from CryptoPanic
 def fetch_trending_topics():
@@ -82,9 +108,9 @@ def fetch_trending_topics():
         logger.error(f"Error fetching trending topics: {e}")
         return []
 
-# Meme generation function
+# Meme generation function with dynamic font scaling
 def create_meme(image_name, caption):
-    """Overlay text on an image to create a meme."""
+    """Overlay text on an image to create a meme with dynamic font scaling."""
     try:
         image_path = os.path.join(IMAGES_FOLDER, image_name)
         if not os.path.exists(image_path):
@@ -93,15 +119,26 @@ def create_meme(image_name, caption):
 
         with Image.open(image_path) as img:
             draw = ImageDraw.Draw(img)
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 36)
+            width, height = img.size
 
-            # Calculate text size using textbbox
+            # Start with a base font size
+            font_size = 36
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
+
+            # Calculate text size and adjust font size if necessary
             text_bbox = draw.textbbox((0, 0), caption, font=font)
             text_width = text_bbox[2] - text_bbox[0]
             text_height = text_bbox[3] - text_bbox[1]
 
+            # Reduce font size until the text fits within the image width
+            while text_width > width - 40 or text_height > height - 40:  # Leave 20px margin on each side
+                font_size -= 2
+                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
+                text_bbox = draw.textbbox((0, 0), caption, font=font)
+                text_width = text_bbox[2] - text_bbox[0]
+                text_height = text_bbox[3] - text_bbox[1]
+
             # Determine text position
-            width, height = img.size
             x = (width - text_width) // 2
             y = height - text_height - 20
 
@@ -235,15 +272,23 @@ def generate_meme_caption():
         logger.error(f"Error generating meme caption: {e}")
         return "When you buy the dip, but it keeps dipping... because of course it does. 😅 #CryptoMemes"
 
-# Post a tweet
+# Post a tweet using Twitter API v2 with rate limiting
 def post_tweet(content, image_path=None):
-    """Post a tweet with optional image."""
+    global tweet_count
+    check_rate_limit()  # Ensure we're within rate limits
+    
     try:
         if image_path:
-            api.update_status_with_media(content, image_path)
+            media = client.media_upload(filename=image_path)
+            response = client.create_tweet(text=content, media_ids=[media.media_id])
         else:
-            api.update_status(content)
-        logger.info("Tweet posted successfully.")
+            response = client.create_tweet(text=content)
+        
+        if response.data:
+            tweet_count += 1
+            logger.info("Tweet posted successfully.")
+        else:
+            logger.error("Failed to post tweet.")
     except Exception as e:
         logger.error(f"Error posting tweet: {e}")
 
@@ -251,18 +296,18 @@ def post_tweet(content, image_path=None):
 def reply_to_mentions():
     """Reply to tweets that mention the bot."""
     try:
-        mentions = api.mentions_timeline(count=5)  # Fetch the latest 5 mentions
-        for mention in mentions:
+        mentions = client.get_mentions(count=5)  # Fetch the latest 5 mentions
+        for mention in mentions.data:
             if not mention.favorited:  # Avoid replying to the same mention twice
                 user_prompt = mention.text.replace("@YourBotName", "").strip()
                 reasoning_content = fetch_deepseek_response(user_prompt)
                 final_response = fetch_openai_response(user_prompt, reasoning_content)
-                api.update_status(
-                    status=f"@{mention.user.screen_name} {final_response}",
-                    in_reply_to_status_id=mention.id
+                client.create_tweet(
+                    text=f"@{mention.user.screen_name} {final_response}",
+                    in_reply_to_tweet_id=mention.id
                 )
                 logger.info(f"Replied to mention from @{mention.user.screen_name}")
-                mention.favorite()  # Mark the mention as favorited to avoid duplicate replies
+                client.like(mention.id)  # Mark the mention as favorited to avoid duplicate replies
     except Exception as e:
         logger.error(f"Error replying to mentions: {e}")
 
@@ -273,24 +318,20 @@ def run_bot():
         action = random.choice(["regular_tweet", "meme_tweet", "interact"])
 
         if action == "regular_tweet":
-            # Generate a unique prompt and post a regular tweet
             user_prompt = generate_unique_prompt()
             reasoning_content = fetch_deepseek_response(user_prompt)
             final_response = fetch_openai_response(user_prompt, reasoning_content)
             post_tweet(final_response)
-            # Update memory only for regular tweets
             update_memory(user_prompt, final_response)
 
         elif action == "meme_tweet":
-            # Generate a meme caption and post a meme tweet
             caption = generate_meme_caption()
-            image_name = random.choice(os.listdir(IMAGES_FOLDER))  # Pick a random image
+            image_name = random.choice(os.listdir(IMAGES_FOLDER))
             meme_path = create_meme(image_name, caption)
             if meme_path:
                 post_tweet(caption, meme_path)
 
         elif action == "interact":
-            # Reply to mentions
             reply_to_mentions()
 
         # Sleep for 15 minutes before the next action
