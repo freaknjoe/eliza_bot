@@ -1,6 +1,8 @@
 import os
 import random
 import logging
+import threading
+from flask import Flask
 import tweepy
 import nltk
 from nltk.chat.util import Chat, reflections
@@ -14,6 +16,16 @@ nltk.download("punkt")
 # Logging setup
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("TwitterBot")
+
+# Flask setup for Render port binding
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Twitter bot is running!"
+
+def start_flask():
+    app.run(host='0.0.0.0', port=10000)
 
 # Fetch credentials from environment variables
 API_KEY = os.getenv('TWITTER_API_KEY')
@@ -111,4 +123,7 @@ def run_bot():
         sleep(3600)  # Sleep for an hour
 
 if __name__ == "__main__":
+    # Start Flask server in a separate thread for Render port binding
+    threading.Thread(target=start_flask).start()
+    # Start the Twitter bot
     run_bot()
