@@ -2,7 +2,6 @@ import os
 import random
 import json
 import logging
-import openai
 import time
 import threading
 import requests
@@ -132,12 +131,20 @@ def fetch_deepseek_response(user_prompt):
     """Fetch reasoning content from DeepSeek."""
     logger.debug(f"Fetching DeepSeek response for prompt: {user_prompt}")
     try:
-        response = openai.ChatCompletion.create(
-            model='deepseek-chat',
-            messages=[{"role": "user", "content": user_prompt}]
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
+        url = "https://api.deepseek.com/v1/chat/completions"  # Replace with the actual DeepSeek API endpoint
+        headers = {
+            "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        data = {
+            "model": "deepseek-reasoning-model",  # Replace with the actual model name
+            "messages": [{"role": "user", "content": user_prompt}],
+            "max_tokens": 200
+        }
+        response = requests.post(url, headers=headers, json=data)
+        response.raise_for_status()
+        return response.json()["choices"][0]["message"]["content"].strip()
+    except requests.exceptions.RequestException as e:
         logger.error(f"Error fetching DeepSeek response: {e}")
         return None
 
@@ -164,8 +171,30 @@ def call_openai_with_backoff(prompt):
             logger.error(f"Error calling OpenAI: {e}")
             return None
 
+def generate_meme(caption):
+    """Generate a meme image with a caption."""
+    try:
+        image = Image.open(os.path.join(IMAGES_FOLDER, "meme_template.jpg"))
+        draw = ImageDraw.Draw(image)
+        font = ImageFont.load_default()
+        draw.text((10, 10), caption, font=font, fill="white")
+        meme_path = os.path.join(IMAGES_FOLDER, "generated_meme.jpg")
+        image.save(meme_path)
+        return meme_path
+    except Exception as e:
+        logger.error(f"Error generating meme: {e}")
+        return None
+
+def post_meme(caption):
+    """Generate and post a meme."""
+    meme_path = generate_meme(caption)
+    if meme_path:
+        media = client.media_upload(meme_path)
+        client.create_tweet(text=caption, media_ids=[media.media_id])
+        logger.info(f"Posted meme: {caption}")
+
 def reply_to_mentions():
-    """Reply to mentions on Twitter."""
+    """Reply to mentions on Twitter using DeepSeek."""
     logger.debug("Checking for mentions to reply to.")
     try:
         mentions = client.get_users_mentions(user_id="1878624202229493760", max_results=5)
@@ -195,7 +224,7 @@ def run_bot():
     """Main bot loop."""
     logger.debug("Starting the bot.")
     while True:
-        action = random.choice(["regular_tweet", "meme_tweet", "interact"])
+        action = random.choice(["regular_tweet", "meme_tweet", "interact", "analyze_trends"])
         
         if action == "regular_tweet":
             logger.debug("Posting a regular tweet.")
@@ -212,11 +241,21 @@ def run_bot():
             if trending_topics:
                 meme_caption = call_openai_with_backoff(f"Create a witty crypto meme caption about: {', '.join(trending_topics)}")
                 if meme_caption:
-                    logger.info(f"Generated meme caption: {meme_caption}")
+                    post_meme(meme_caption)
 
         elif action == "interact":
             logger.debug("Interacting with mentions.")
             reply_to_mentions()
+
+        elif action == "analyze_trends":
+            logger.debug("Analyzing trends using DeepSeek.")
+            prompt = "Analyze the latest trends in crypto and provide a summary."
+            analysis = fetch_deepseek_response(prompt)
+            if analysis:
+                tweet = f"📊 Crypto Trend Analysis:\n\n{analysis}"
+                check_rate_limit()
+                client.create_tweet(text=tweet)
+                logger.info(f"Posted analysis: {tweet}")
 
         logger.debug("Bot is sleeping for 15 minutes.")
         time.sleep(900)
