@@ -23,9 +23,8 @@ def home():
     return "Crypto, Memes, AI, DeFi, and DeFiAI Social Bot is running!"
 
 def start_flask():
-    port = int(os.environ.get("PORT", 10000))  # Default to 10000 if PORT is not set
-    logger.debug(f"Starting Flask app on port {port}.")
-    app.run(host='0.0.0.0', port=port)
+    port = int(os.getenv("PORT", 10000))  # Default to 10000 if PORT is not set
+    app.run(host="0.0.0.0", port=port)
 
 # Fetch credentials from environment variables
 API_KEY = os.getenv('TWITTER_API_KEY')
