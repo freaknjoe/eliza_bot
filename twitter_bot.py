@@ -2,14 +2,13 @@ import os
 import random
 import json
 import logging
+import openai
 import time
 import threading
 import requests
 from flask import Flask
 import tweepy
 from PIL import Image, ImageDraw, ImageFont
-from datetime import datetime
-from openai import OpenAI
 
 # Logging setup
 logging.basicConfig(level=logging.INFO)
@@ -47,13 +46,22 @@ client = tweepy.Client(
     access_token_secret=ACCESS_TOKEN_SECRET
 )
 
-# Initialize OpenAI and DeepSeek clients
-openai_client = OpenAI(api_key=OPENAI_API_KEY)
-deepseek_client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com/v1")
+# Set OpenAI API key
+openai.api_key = OPENAI_API_KEY
 
-# Path to the images folder
-IMAGES_FOLDER = "images"  # Ensure this folder exists and contains your images
-MEMORY_FILE = "bot_memory.json"  # File to store prompts and responses
+# Paths and constants
+IMAGES_FOLDER = "images"
+MEMORY_FILE = "bot_memory.json"
+
+# Rate limit tracking
+RATE_LIMIT_WINDOW = 900  # 15 minutes
+MAX_TWEETS_PER_WINDOW = 20
+tweet_count = 0
+last_reset_time = time.time()
+
+# Caching for trending topics
+last_trending_time = 0
+cached_trending_topics = []
 
 # Ensure the images folder exists
 if not os.path.exists(IMAGES_FOLDER):
@@ -65,13 +73,8 @@ if not os.path.exists(MEMORY_FILE):
     with open(MEMORY_FILE, "w") as f:
         json.dump({"prompts": [], "responses": []}, f)
 
-# Rate limit tracking
-RATE_LIMIT_WINDOW = 900  # 15 minutes in seconds
-MAX_TWEETS_PER_WINDOW = 900
-tweet_count = 0
-last_reset_time = time.time()
-
 def check_rate_limit():
+    """Ensure we're within rate limits."""
     global tweet_count, last_reset_time
     current_time = time.time()
     if current_time - last_reset_time >= RATE_LIMIT_WINDOW:
@@ -84,47 +87,63 @@ def check_rate_limit():
         tweet_count = 0
         last_reset_time = time.time()
 
-# Fetch trending crypto topics from CryptoPanic
 def fetch_trending_topics():
+    """Fetch trending crypto topics from CryptoPanic with caching."""
+    global last_trending_time, cached_trending_topics
+    if time.time() - last_trending_time < 900:  # 15 minutes
+        return cached_trending_topics
     try:
         url = f"https://cryptopanic.com/api/v1/posts/?auth_token={CRYPTOPANIC_API_KEY}"
         response = requests.get(url)
         if response.status_code == 200 and "results" in response.json():
-            news_items = response.json()["results"]
-            return [item["title"] for item in news_items if "title" in item][:5]
-        else:
-            logger.warning(f"Failed to fetch trending topics: {response.status_code}")
-            return []
+            cached_trending_topics = [item["title"] for item in response.json()["results"] if "title" in item][:5]
+            last_trending_time = time.time()
+            return cached_trending_topics
     except Exception as e:
         logger.error(f"Error fetching trending topics: {e}")
-        return []
+    return []
 
-# Memory system
 def load_memory():
+    """Load past prompts and responses."""
     with open(MEMORY_FILE, "r") as f:
         return json.load(f)
 
 def save_memory(memory):
+    """Save prompts and responses."""
     with open(MEMORY_FILE, "w") as f:
         json.dump(memory, f)
 
 def update_memory(prompt, response):
+    """Update memory with a new prompt and response."""
     memory = load_memory()
     memory["prompts"].append(prompt)
     memory["responses"].append(response)
     save_memory(memory)
 
-# Exponential backoff for OpenAI requests
+def fetch_deepseek_response(user_prompt):
+    """Fetch reasoning content from DeepSeek."""
+    try:
+        response = openai.ChatCompletion.create(
+            model='deepseek-chat',
+            messages=[{"role": "user", "content": user_prompt}]
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        logger.error(f"Error fetching DeepSeek response: {e}")
+        return None
+
 def call_openai_with_backoff(prompt):
+    """Fetch a witty response with OpenAI and exponential backoff."""
     retries = 0
     while retries < 5:
         try:
-            response = openai_client.chat.completions.create(
+            response = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
                 messages=[
                     {"role": "system", "content": "You are a witty assistant."},
                     {"role": "user", "content": prompt}
-                ]
+                ],
+                max_tokens=200  # Limit response length
             )
             return response.choices[0].message.content.strip()
         except openai.error.RateLimitError:
@@ -134,20 +153,8 @@ def call_openai_with_backoff(prompt):
             logger.error(f"Error calling OpenAI: {e}")
             return None
 
-# Fetch reasoning content from DeepSeek
-def fetch_deepseek_response(user_prompt):
-    try:
-        deepseek_response = deepseek_client.chat.completions.create(
-            model='deepseek-chat',
-            messages=[{"role": "user", "content": user_prompt}]
-        )
-        return deepseek_response.choices[0].message.content.strip()
-    except Exception as e:
-        logger.error(f"Error fetching DeepSeek response: {e}")
-        return None
-
-# Reply to mentions
 def reply_to_mentions():
+    """Reply to mentions on Twitter."""
     try:
         mentions = client.get_users_mentions(user_id="1878624202229493760", max_results=5)
         if mentions.data:
@@ -171,8 +178,8 @@ def reply_to_mentions():
     except Exception as e:
         logger.error(f"Error replying to mentions: {e}")
 
-# Main bot logic
 def run_bot():
+    """Main bot loop."""
     while True:
         action = random.choice(["regular_tweet", "meme_tweet", "interact"])
         
@@ -189,7 +196,6 @@ def run_bot():
             if trending_topics:
                 meme_caption = call_openai_with_backoff(f"Create a witty crypto meme caption about: {', '.join(trending_topics)}")
                 if meme_caption:
-                    # Add meme generation logic here if needed
                     logger.info(f"Generated meme caption: {meme_caption}")
 
         elif action == "interact":
