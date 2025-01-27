@@ -1,4 +1,3 @@
-import openai
 import os
 import random
 import json
@@ -9,6 +8,7 @@ import requests
 from flask import Flask
 import tweepy
 from PIL import Image, ImageDraw, ImageFont
+import openai  # Ensure OpenAI is imported
 
 # Logging setup
 logging.basicConfig(level=logging.DEBUG)  # Set to DEBUG for detailed logging
