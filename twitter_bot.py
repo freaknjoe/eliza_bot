@@ -7,7 +7,7 @@ import logging
 from flask import Flask
 import tweepy
 from datetime import datetime
-from PIL import Image  # For verifying images
+from PIL import Image
 
 # Logging setup
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -42,8 +42,17 @@ if not all([API_KEY, API_SECRET_KEY, ACCESS_TOKEN, ACCESS_TOKEN_SECRET, DEEPSEEK
     logger.critical("API credentials are not properly set as environment variables.")
     raise ValueError("API credentials are missing.")
 
-# Authenticate with Twitter
-client = tweepy.Client(
+# Authenticate with Twitter API v1.1 (for media upload)
+auth = tweepy.OAuth1UserHandler(
+    consumer_key=API_KEY,
+    consumer_secret=API_SECRET_KEY,
+    access_token=ACCESS_TOKEN,
+    access_token_secret=ACCESS_TOKEN_SECRET
+)
+api_v1 = tweepy.API(auth)
+
+# Authenticate with Twitter API v2 (for posting tweets)
+client_v2 = tweepy.Client(
     consumer_key=API_KEY,
     consumer_secret=API_SECRET_KEY,
     access_token=ACCESS_TOKEN,
@@ -128,10 +137,13 @@ def post_tweet(text, image_path=None):
     """Post a tweet with error handling."""
     try:
         if image_path:
-            media = client.media_upload(filename=image_path)
-            client.create_tweet(text=text, media_ids=[media.media_id])
+            # Upload media using Twitter API v1.1
+            media = api_v1.media_upload(filename=image_path)
+            # Post tweet with media using Twitter API v2
+            client_v2.create_tweet(text=text, media_ids=[media.media_id])
         else:
-            client.create_tweet(text=text)
+            # Post text-only tweet using Twitter API v2
+            client_v2.create_tweet(text=text)
         logger.info(f"Posted tweet: {text}")
     except tweepy.TweepyException as e:
         logger.error(f"Error posting tweet: {e}")
