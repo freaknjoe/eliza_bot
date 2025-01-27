@@ -8,10 +8,10 @@ import requests
 from flask import Flask
 import tweepy
 from PIL import Image, ImageDraw, ImageFont
-import openai  # Ensure OpenAI is imported
+import openai  
 
 # Logging setup
-logging.basicConfig(level=logging.DEBUG)  # Set to DEBUG for detailed logging
+logging.basicConfig(level=logging.DEBUG)  
 logger = logging.getLogger("CryptoSocialBot")
 
 # Flask setup for Render port binding
@@ -23,7 +23,7 @@ def home():
     return "Crypto, Memes, AI, DeFi, and DeFiAI Social Bot is running!"
 
 def start_flask():
-    port = int(os.getenv("PORT", 10000))  # Default to 10000 if PORT is not set
+    port = int(os.getenv("PORT", 10000))  
     app.run(host="0.0.0.0", port=port)
 
 # Fetch credentials from environment variables
@@ -56,7 +56,7 @@ IMAGES_FOLDER = "images"
 MEMORY_FILE = "bot_memory.json"
 
 # Rate limit tracking
-RATE_LIMIT_WINDOW = 900  # 15 minutes
+RATE_LIMIT_WINDOW = 900  
 MAX_TWEETS_PER_WINDOW = 20
 tweet_count = 0
 last_reset_time = time.time()
@@ -79,6 +79,7 @@ def check_rate_limit():
     """Ensure we're within rate limits."""
     global tweet_count, last_reset_time
     current_time = time.time()
+    logger.debug(f"Current tweet count: {tweet_count}, Current time: {current_time}")
     if current_time - last_reset_time >= RATE_LIMIT_WINDOW:
         logger.debug("Resetting rate limits.")
         tweet_count = 0
@@ -93,16 +94,18 @@ def check_rate_limit():
 def fetch_trending_topics():
     """Fetch trending crypto topics from CryptoPanic with caching."""
     global last_trending_time, cached_trending_topics
-    if time.time() - last_trending_time < 900:  # 15 minutes
+    if time.time() - last_trending_time < 900:  
         logger.debug("Returning cached trending topics.")
         return cached_trending_topics
     try:
         logger.debug("Fetching trending topics from CryptoPanic.")
         url = f"https://cryptopanic.com/api/v1/posts/?auth_token={CRYPTOPANIC_API_KEY}"
         response = requests.get(url)
-        if response.status_code == 200 and "results" in response.json():
+        response.raise_for_status()  # Raise an error for bad responses
+        if "results" in response.json():
             cached_trending_topics = [item["title"] for item in response.json()["results"] if "title" in item][:5]
             last_trending_time = time.time()
+            logger.debug(f"Trending topics fetched: {cached_trending_topics}")
             return cached_trending_topics
     except Exception as e:
         logger.error(f"Error fetching trending topics: {e}")
@@ -132,18 +135,19 @@ def fetch_deepseek_response(user_prompt):
     """Fetch reasoning content from DeepSeek."""
     logger.debug(f"Fetching DeepSeek response for prompt: {user_prompt}")
     try:
-        url = "https://api.deepseek.com/v1/chat/completions"  # Replace with the actual DeepSeek API endpoint
+        url = "https://api.deepseek.com/v1/chat/completions"  
         headers = {
             "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
             "Content-Type": "application/json"
         }
         data = {
-            "model": "deepseek-reasoning-model",  # Replace with the actual model name
+            "model": "deepseek-reasoning-model",
             "messages": [{"role": "user", "content": user_prompt}],
             "max_tokens": 200
         }
         response = requests.post(url, headers=headers, json=data)
-        response.raise_for_status()
+        response.raise_for_status()  # Raise an error for bad responses
+        logger.debug(f"DeepSeek response: {response.json()}")
         return response.json()["choices"][0]["message"]["content"].strip()
     except requests.exceptions.RequestException as e:
         logger.error(f"Error fetching DeepSeek response: {e}")
@@ -163,6 +167,7 @@ def call_openai_with_backoff(prompt):
                 ],
                 max_tokens=200
             )
+            logger.debug(f"OpenAI response: {response}")
             return response.choices[0].message.content.strip()
         except openai.error.RateLimitError:
             retries += 1
@@ -226,6 +231,7 @@ def run_bot():
     logger.debug("Starting the bot.")
     while True:
         action = random.choice(["regular_tweet", "meme_tweet", "interact", "analyze_trends"])
+        logger.debug(f"Selected action: {action}")  # Log selected action
         
         if action == "regular_tweet":
             logger.debug("Posting a regular tweet.")
@@ -235,7 +241,7 @@ def run_bot():
                 check_rate_limit()
                 client.create_tweet(text=tweet)
                 logger.info(f"Posted tweet: {tweet}")
-
+        
         elif action == "meme_tweet":
             logger.debug("Generating a meme tweet.")
             trending_topics = fetch_trending_topics()
@@ -258,8 +264,8 @@ def run_bot():
                 client.create_tweet(text=tweet)
                 logger.info(f"Posted analysis: {tweet}")
 
-        logger.debug("Bot is sleeping for 15 minutes.")
-        time.sleep(900)
+        logger.debug("Bot is sleeping for 60 seconds.")
+        time.sleep(60)  # Change to 60 seconds for testing
 
 if __name__ == "__main__":
     logger.debug("Initializing the bot.")
