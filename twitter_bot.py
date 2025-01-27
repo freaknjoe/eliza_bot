@@ -111,48 +111,6 @@ def fetch_trending_topics():
         logger.error(f"Error fetching trending topics: {e}")
     return []
 
-def load_memory():
-    """Load past prompts and responses."""
-    logger.debug("Loading memory from file.")
-    with open(MEMORY_FILE, "r") as f:
-        return json.load(f)
-
-def save_memory(memory):
-    """Save prompts and responses."""
-    logger.debug("Saving memory to file.")
-    with open(MEMORY_FILE, "w") as f:
-        json.dump(memory, f)
-
-def update_memory(prompt, response):
-    """Update memory with a new prompt and response."""
-    logger.debug("Updating memory with a new prompt and response.")
-    memory = load_memory()
-    memory["prompts"].append(prompt)
-    memory["responses"].append(response)
-    save_memory(memory)
-
-def fetch_deepseek_response(user_prompt):
-    """Fetch reasoning content from DeepSeek."""
-    logger.debug(f"Fetching DeepSeek response for prompt: {user_prompt}")
-    try:
-        url = "https://api.deepseek.com/v1/chat/completions"  
-        headers = {
-            "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        data = {
-            "model": "deepseek-reasoning-model",
-            "messages": [{"role": "user", "content": user_prompt}],
-            "max_tokens": 200
-        }
-        response = requests.post(url, headers=headers, json=data)
-        response.raise_for_status()  # Raise an error for bad responses
-        logger.debug(f"DeepSeek response: {response.json()}")
-        return response.json()["choices"][0]["message"]["content"].strip()
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error fetching DeepSeek response: {e}")
-        return None
-
 def call_openai_with_backoff(prompt):
     """Fetch a witty response with OpenAI and exponential backoff."""
     logger.debug(f"Fetching response from OpenAI for prompt: {prompt}")
@@ -199,38 +157,11 @@ def post_meme(caption):
         client.create_tweet(text=caption, media_ids=[media.media_id])
         logger.info(f"Posted meme: {caption}")
 
-def reply_to_mentions():
-    """Reply to mentions on Twitter using DeepSeek."""
-    logger.debug("Checking for mentions to reply to.")
-    try:
-        mentions = client.get_users_mentions(user_id="1878624202229493760", max_results=5)
-        if mentions.data:
-            for mention in mentions.data:
-                logger.debug(f"Processing mention: {mention.text}")
-                if not mention.favorited:
-                    user_prompt = mention.text.replace("@3DPUNKBOT", "").strip()
-                    reasoning_content = fetch_deepseek_response(user_prompt)
-                    
-                    if reasoning_content is None:
-                        logger.info(f"Skipping reply to @{mention.author.username} due to DeepSeek failure.")
-                        continue
-                    
-                    final_response = call_openai_with_backoff(f"Based on this reasoning: {reasoning_content}, respond to this: {user_prompt}")
-                    if final_response:
-                        client.create_tweet(
-                            text=f"@{mention.author.username} {final_response}",
-                            in_reply_to_tweet_id=mention.id
-                        )
-                        client.like(mention.id)
-                        logger.info(f"Replied to @{mention.author.username}.")
-    except Exception as e:
-        logger.error(f"Error replying to mentions: {e}")
-
 def run_bot():
     """Main bot loop."""
     logger.debug("Starting the bot.")
     while True:
-        action = random.choice(["regular_tweet", "meme_tweet", "interact", "analyze_trends"])
+        action = random.choice(["regular_tweet", "meme_tweet", "analyze_trends"])
         logger.debug(f"Selected action: {action}")  # Log selected action
         
         if action == "regular_tweet":
@@ -250,10 +181,6 @@ def run_bot():
                 if meme_caption:
                     post_meme(meme_caption)
 
-        elif action == "interact":
-            logger.debug("Interacting with mentions.")
-            reply_to_mentions()
-
         elif action == "analyze_trends":
             logger.debug("Analyzing trends using DeepSeek.")
             prompt = "Analyze the latest trends in crypto and provide a summary."
@@ -264,8 +191,9 @@ def run_bot():
                 client.create_tweet(text=tweet)
                 logger.info(f"Posted analysis: {tweet}")
 
-        logger.debug("Bot is sleeping for 60 seconds.")
-        time.sleep(60)  # Change to 60 seconds for testing
+        sleep_time = random.randint(2 * 3600, 3 * 3600)  # Sleep for 2-3 hours
+        logger.debug(f"Bot is sleeping for {sleep_time} seconds.")
+        time.sleep(sleep_time)  # Sleep for the calculated interval
 
 if __name__ == "__main__":
     logger.debug("Initializing the bot.")
