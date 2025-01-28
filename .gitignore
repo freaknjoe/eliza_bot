@@ -1,14 +1,7 @@
-# Ignore environment variables
 .env
-
-# Ignore logs
-*.log
-*.json
-
-# Ignore cache and system files
+*.pyc
 __pycache__/
-*.py[cod]
-.DS_Store
-
-.env
-.env
+.idea/
+.git/
+*.log
+*.sqlite

@@ -1,0 +1,58 @@
+[
+[
+[
+[
+[
+[
+[
+{"time": "2025-01-25 22:18:46,445", "level": "INFO", "message": "Structured logging enabled", "name": "root"}
+{"time": "2025-01-25 22:23:08,185", "level": "INFO", "message": "Structured logging enabled", "name": "root"}
+{"time": "2025-01-25 22:28:01,537", "level": "INFO", "message": "Structured logging enabled", "name": "root"}
+{"time": "2025-01-25 22:32:13,360", "level": "INFO", "message": "Structured logging enabled", "name": "root"}
+{"time": "2025-01-25 22:42:07,380", "level": "INFO", "message": "Structured logging enabled", "name": "root"},
+]
+{"time": "2025-01-25 22:49:48,290", "level": "INFO", "message": "Structured logging enabled", "name": "root"},
+]
+{"time": "2025-01-25 22:51:21,053", "level": "INFO", "message": "Post-processed log file to a valid JSON array.", "name": "root"},
+{"time": "2025-01-25 22:55:55,332", "level": "INFO", "message": "Structured logging enabled", "name": "root"},
+]
+{"time": "2025-01-25 23:02:40,337", "level": "INFO", "message": "Post-processed log file to a valid JSON array.", "name": "root"},
+{"time": "2025-01-25 23:03:18,183", "level": "INFO", "message": "Structured logging enabled", "name": "root"},
+{"time": "2025-01-25 23:03:27,396", "level": "ERROR", "message": "Error loading config: [Errno 2] No such file or directory: '/Users/josephlastovica/Desktop/FEDJA/config.json'", "name": "root"},
+{"time": "2025-01-25 23:16:31,539", "level": "INFO", "message": "Structured logging enabled", "name": "root"},
+]
+{"time": "2025-01-25 23:25:39,529", "level": "INFO", "message": "Post-processed log file to a valid JSON array.", "name": "root"},
+{"time": "2025-01-25 23:31:32,961", "level": "INFO", "message": "Structured logging enabled", "name": "root"},
+{"time": "2025-01-25 23:31:38,311", "level": "INFO", "message": "Starting scheduler...", "name": "root"},
+{"time": "2025-01-25 23:32:38,565", "level": "INFO", "message": "Running scheduled task...", "name": "root"},
+{"time": "2025-01-25 23:32:49,964", "level": "INFO", "message": "[Dry Run] Would post tweet: I'm am the heir to the kingdom. Locked and loaded. Take the simple steps outlined below. https://t.co/77rzYsNqf2 @anndylian The crown and throne aren't just", "name": "root"},
+{"time": "2025-01-25 23:33:00,127", "level": "WARNING", "message": "Rate limit exceeded. Waiting 888 seconds...", "name": "root"},
+]
+{"time": "2025-01-25 23:37:57,476", "level": "INFO", "message": "Post-processed log file to a valid JSON array.", "name": "root"},
+{"time": "2025-01-25 23:40:23,911", "level": "INFO", "message": "Structured logging enabled", "name": "root"},
+{"time": "2025-01-25 23:40:28,686", "level": "INFO", "message": "Starting scheduler...", "name": "root"},
+{"time": "2025-01-25 23:41:28,920", "level": "INFO", "message": "Running scheduled task...", "name": "root"},
+{"time": "2025-01-25 23:41:29,228", "level": "WARNING", "message": "Rate limit exceeded. Waiting 379 seconds...", "name": "root"},
+]
+{"time": "2025-01-25 23:44:37,899", "level": "INFO", "message": "Post-processed log file to a valid JSON array.", "name": "root"},
+{"time": "2025-01-25 23:50:23,886", "level": "INFO", "message": "Structured logging enabled", "name": "root"},
+{"time": "2025-01-25 23:50:28,465", "level": "INFO", "message": "Starting scheduler...", "name": "root"},
+{"time": "2025-01-25 23:51:28,721", "level": "INFO", "message": "Running scheduled task...", "name": "root"},
+{"time": "2025-01-25 23:51:33,259", "level": "INFO", "message": "Caption generated for /Users/josephlastovica/Desktop/FEDJA/meme_templates/sad_template.jpg: a gray cat sitting on a white rug", "name": "root"},
+{"time": "2025-01-25 23:51:33,548", "level": "WARNING", "message": "Font arial.ttf not found. Using default font.", "name": "root"},
+{"time": "2025-01-25 23:51:33,549", "level": "ERROR", "message": "Error generating meme: 'ImageDraw' object has no attribute 'textsize'", "name": "root"},
+{"time": "2025-01-25 23:51:33,550", "level": "INFO", "message": "[Dry Run] Would post meme: \ud83d\ude22 I'm am the heir to the kingdom. Locked and loaded. Take the simple steps outlined below. https://t.co/77rzYsNqf2 @anndylian The crown and throne aren't just\nCaption: a gray cat sitting on a white rug", "name": "root"},
+{"time": "2025-01-25 23:51:43,702", "level": "WARNING", "message": "Rate limit exceeded. Bypassing wait time for testing.", "name": "root"},
+{"time": "2025-01-25 23:51:53,854", "level": "WARNING", "message": "Rate limit exceeded. Bypassing wait time for testing.", "name": "root"},
+{"time": "2025-01-25 23:52:03,931", "level": "WARNING", "message": "Rate limit exceeded. Bypassing wait time for testing.", "name": "root"},
+{"time": "2025-01-25 23:52:14,001", "level": "WARNING", "message": "Rate limit exceeded. Bypassing wait time for testing.", "name": "root"},
+{"time": "2025-01-25 23:52:24,076", "level": "WARNING", "message": "Rate limit exceeded. Bypassing wait time for testing.", "name": "root"},
+{"time": "2025-01-25 23:52:34,143", "level": "WARNING", "message": "Rate limit exceeded. Bypassing wait time for testing.", "name": "root"},
+{"time": "2025-01-25 23:52:44,212", "level": "WARNING", "message": "Rate limit exceeded. Bypassing wait time for testing.", "name": "root"},
+{"time": "2025-01-25 23:52:54,518", "level": "WARNING", "message": "Rate limit exceeded. Bypassing wait time for testing.", "name": "root"},
+{"time": "2025-01-25 23:53:04,587", "level": "WARNING", "message": "Rate limit exceeded. Bypassing wait time for testing.", "name": "root"},
+{"time": "2025-01-25 23:53:14,655", "level": "WARNING", "message": "Rate limit exceeded. Bypassing wait time for testing.", "name": "root"},
+{"time": "2025-01-25 23:53:24,720", "level": "WARNING", "message": "Rate limit exceeded. Bypassing wait time for testing.", "name": "root"},
+{"time": "2025-01-25 23:53:34,790", "level": "WARNING", "message": "Rate limit exceeded. Bypassing wait time for testing.", "name": "root"},
+]
+{"time": "2025-01-25 23:53:42,338", "level": "INFO", "message": "Post-processed log file to a valid JSON array.", "name": "root"},
