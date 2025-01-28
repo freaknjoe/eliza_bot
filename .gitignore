@@ -1,7 +1,15 @@
 .env
 *.pyc
 __pycache__/
+<<<<<<< HEAD
 .idea/
 .git/
 *.log
 *.sqlite
+=======
+*.py[cod]
+.DS_Store
+
+.env
+.env
+>>>>>>> a0cdf91f985528dca853a8f68a3436ab2783ce24
