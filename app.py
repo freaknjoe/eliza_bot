@@ -22,6 +22,10 @@ app = Flask(__name__)
 def home():
     return "CryptoSocialBot is running!"
 
+@app.route('/health', methods=['GET'])
+def health():
+    return 'OK', 200
+
 def start_flask():
     port = int(os.getenv("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
