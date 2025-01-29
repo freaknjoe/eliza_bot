@@ -3,4 +3,4 @@ tweepy==4.6.0
 requests>=2.27.0
 python-dotenv==0.19.0
 transformers==4.21.3
-torch==2.0.0
+torch==2.5.0
