@@ -1,0 +1,14 @@
+# Render configuration file for Flask application
+
+env: python
+
+runtime:
+  name: python
+  version: '3.11.11'
+
+build:
+  - echo "Installing dependencies..."
+  - pip install --user -r requirements.txt
+
+start:
+  - gunicorn app:app --bind 0.0.0.0 --port $PORT
